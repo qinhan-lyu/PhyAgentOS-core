@@ -51,8 +51,8 @@ import os
 from typing import Any
 
 import numpy as np
-
 from _core.adapter import StepOutcome, default_aggregate
+
 
 # 键名取自 XPolicyLab 的标准观测/动作格式（README 的 Standard Data Formats），
 # **不能自己起名**：这些键要原样进 take_action。
@@ -143,7 +143,7 @@ def _stub_model_client() -> None:
     # 生命周期类调用要放行：`env.reset()` 自己就会调 `model_client.call("reset")`
     # （eval_env.py:245），不是只有 eval_one_episode 才碰 model_client。
     # 但**取动作**必须炸——那说明有人误用了官方 rollout，我们的动作从 dora 来。
-    _LIFECYCLE = frozenset({"reset", "update_obs", "update_obs_batch",
+    _lifecycle = frozenset({"reset", "update_obs", "update_obs_batch",
                             "prepare_case", "trial_end"})
 
     class _NoPolicyClient:
@@ -151,7 +151,7 @@ def _stub_model_client() -> None:
             pass
 
         def call(self, func_name: str | None = None, *a: Any, **k: Any) -> None:
-            if func_name in _LIFECYCLE:
+            if func_name in _lifecycle:
                 return None
             raise RuntimeError(
                 f"forge 节点不经过 WS 策略服务器，但收到了 {func_name!r}。"
@@ -250,17 +250,16 @@ class RoboDojoAdapter:
 
         任何一步顺序换了都可能改变随机化结果 —— 这里不做"看起来等价"的重排。
         """
-        from omegaconf import OmegaConf
+        import importlib
 
         from env.global_configs import ENV_CONFIG_PATH
+        from omegaconf import OmegaConf
         from utils.load_file import load_yaml
         from utils.pipeline_utils import (
             process_config,
             process_randomization,
             resolve_random_task_num_envs,
         )
-
-        import importlib
 
         task_registry = importlib.import_module(f"task.{self._benchmark}.task_registry")
         bench_path = os.path.join(self._root, "task", self._benchmark)

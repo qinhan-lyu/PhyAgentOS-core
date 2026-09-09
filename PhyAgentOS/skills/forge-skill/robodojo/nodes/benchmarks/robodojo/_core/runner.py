@@ -18,8 +18,8 @@ from forge_msgs import Image, JointCommand, JointState, PolicyCommand
 
 from .adapter import CHUNK_END_SENTINEL, default_aggregate
 from .config import BaseBenchmarkConfig, derive_episode_seed
-from .video import EpisodeRecorder
 from .result import BenchmarkResult, EpisodeRecord
+from .video import EpisodeRecorder
 
 
 class BenchmarkRunner:

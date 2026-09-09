@@ -32,11 +32,9 @@ from __future__ import annotations
 
 import os
 import sys
-import time
 from typing import Any
 
 import numpy as np
-import pyarrow as pa
 from dora import Node
 from forge_msgs import Image, JointCommand, JointState, PolicyCommand
 
