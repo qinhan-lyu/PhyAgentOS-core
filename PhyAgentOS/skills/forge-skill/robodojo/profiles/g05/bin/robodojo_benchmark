@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+: "${ROBODOJO_ENV:?set ROBODOJO_ENV to RoboDojo env root}"
+: "${ROBODOJO_ROOT:?set ROBODOJO_ROOT to RoboDojo checkout}"
+export PATH="${ROBODOJO_ENV}/bin:${CUDA_HOME}/bin${PATH:+:${PATH}}"
+export LD_LIBRARY_PATH="${ROBODOJO_ENV}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export PYTHONNOUSERSITE="${PYTHONNOUSERSITE:-1}"
+export OMNI_KIT_ACCEPT_EULA="${OMNI_KIT_ACCEPT_EULA:-YES}"
+if [ -n "${ROBODOJO_CACHE_ROOT:-}" ]; then
+  export HF_HOME="${HF_HOME:-$ROBODOJO_CACHE_ROOT/hf}"
+  export MODELSCOPE_CACHE="${MODELSCOPE_CACHE:-$ROBODOJO_CACHE_ROOT/modelscope}"
+  export OV_CACHE_DIR="${OV_CACHE_DIR:-$ROBODOJO_CACHE_ROOT/ov}"
+  export CUDA_CACHE_PATH="${CUDA_CACHE_PATH:-$ROBODOJO_CACHE_ROOT/nv}"
+  export WARP_CACHE_PATH="${WARP_CACHE_PATH:-$ROBODOJO_CACHE_ROOT/warp}"
+fi
+export BENCHMARK_CONFIG="${PAOS_SKILL_ROOT}/profiles/g05/config.yaml"
+exec "${ROBODOJO_ENV}/bin/python" -u "${PAOS_SKILL_ROOT}/nodes/benchmarks/robodojo/main.py" "$@"
