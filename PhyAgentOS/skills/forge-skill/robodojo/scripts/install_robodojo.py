@@ -18,7 +18,14 @@ Never modifies PAOS integrity checks, never changes the frozen packages, never
 tracks the signed index in git.
 """
 from __future__ import annotations
-import argparse, datetime, os, shutil, subprocess, sys, tempfile
+
+import argparse
+import datetime
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 PLACEHOLDERS = {
@@ -87,6 +94,20 @@ def find_paos(explicit: str | None) -> str:
         "paos not found. Configure it with --paos <path>, "
         "PAOS_BIN=<path>, or put 'paos' on PATH."
     )
+def prepare_instance(config_path: Path) -> None:
+    """Make an isolated instance so install does not depend on a manually created tree."""
+    config_path = config_path.expanduser().resolve()
+    data_dir = config_path.parent
+    data_dir.mkdir(parents=True, exist_ok=True)
+    if not config_path.exists():
+        config_path.write_text("{}\n", encoding="utf-8")
+    py_dir = data_dir / "py"
+    py_dir.mkdir(parents=True, exist_ok=True)
+    sc = py_dir / "sitecustomize.py"
+    if not sc.exists():
+        sc.write_text(SITECUSTOMIZE, encoding="utf-8")
+
+
 def presign(tosutil: str, key: str, vp: str) -> str:
     r = subprocess.run([tosutil, "presign", f"tos://{BUCKET}/{key}", f"-vp={vp}"],
                        capture_output=True, text=True)
