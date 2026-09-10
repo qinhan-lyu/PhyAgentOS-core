@@ -18,6 +18,7 @@ profiles/g05/dataflow.yaml     gateway -> bench_endpoint -> robodojo_benchmark -
 profiles/g05/*.yaml            gateway / bench_endpoint / benchmark config
 profiles/g05/env.template.sh   host environment template
 scripts/install_robodojo.py    per-run TOS presign + `paos skill install --index`
+scripts/check_bundle_inventory.py  verify the template inventory against this tree
 docs/                          unsigned schema-v3 index template + 0.1.0 delivery record
 ```
 

@@ -32,9 +32,17 @@ packages:
   bucket_key: skill-bundles/robodojo/0.1.0/robodojo-0.1.0.tar.gz
   expected_sha256: null
   inventory:
+  - path: README.md
+    sha256: 56381c08a3c46ce8e82bced526a29a7e331adb6a5e61a634b3826549d98087c9
+    size: 7350
+    category: file
+  - path: SKILL.md
+    sha256: 82aac86d637f634453ca94bbe61de112bff7dd4b63d5659db75ee29e0f1f3ec3
+    size: 7310
+    category: file
   - path: docs/DELIVERY_0.1.0.md
-    sha256: 91f4dadfb90736cc6099f3534f722292d9f1e90ad1b1005bd0e041e1a36f7a56
-    size: 8657
+    sha256: d430abc97a74f974875b7bb59aba39eb92adc3a96b694c736d6aeccb31c93392
+    size: 10969
     category: file
   - path: profiles/g05/bench_endpoint.yaml
     sha256: 9765a4828104c30b16ebe73f09ea0fafa57ba02c21dda75e7d48d9ef593459e4
@@ -56,20 +64,16 @@ packages:
     sha256: c5b49b11ee39d4df38c88514c9dc20f4e490efabec43d837bf2bbe8596ac4eb2
     size: 6788
     category: file
-  - path: README.md
-    sha256: 1e189fb1d08bf4928f58855666529cbde20453acefa547f1021d66ea838e9c12
-    size: 6608
+  - path: scripts/check_bundle_inventory.py
+    sha256: 81218a85c909c0be95cd46f9d964a331f57570e7fa2db8fd3a3a26ce9c3d8bb3
+    size: 6330
     category: file
   - path: scripts/install_robodojo.py
     sha256: 266eead1af8162a9c57f09f58da8a4a1efb1402571334b6d612ffc79caebf135
     size: 10422
     category: executable
-  - path: SKILL.md
-    sha256: 82aac86d637f634453ca94bbe61de112bff7dd4b63d5659db75ee29e0f1f3ec3
-    size: 7310
-    category: file
   - path: skill.yaml
-    sha256: be651400d125438d7eebdc7c1c498d1293011079187617c6830f534f793e0b82
+    sha256: 0c5bbdde16b91c10808ce49090486afe5caeb1ff63631ade484bfb03e43e95b8
     size: 1635
     category: file
   backend_url: null

@@ -68,6 +68,10 @@ port `93c2659`, plus the inventory-ordering fix). The Skill is packed with the o
   rendered `launch/profiles/g05/dataflow.yaml` resolves every node `path` to that expanded
   `${FORGE_RUNTIME_BIN}` directory — never to a copy inside the Skill tree. The installed Skill
   contains no `nodes/` and no `profiles/g05/bin/`.
+- `python3 scripts/check_bundle_inventory.py --check` reports every Skill file matching the
+  template inventory. The inventory is not read at install time, so it drifts silently when a
+  Skill file changes; run the checker (or `--write`) on the pack host before registering or
+  publishing this candidate.
 - Still pending: a presign run against real TOS for this revision, and GPU / Isaac Sim /
   Agent functional acceptance.
 
