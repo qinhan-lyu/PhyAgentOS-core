@@ -1,7 +1,9 @@
-# 完整链路: gateway -> bench_endpoint -> benchmark -> policy(G05) -> Isaac Sim
-# 可移植运行: node 用 bundle 内的 sh launcher (profiles/g05/bin/<node>),
-# 源/配置经 ${PAOS_SKILL_ROOT} 解析; 运行环境经 required_environment 由宿主提供,
-# 并在 dora start 时以 ${VAR} 展开写入各 node env。
+# 完整链路: gateway -> bench_endpoint -> robodojo_benchmark -> policy(G05) -> Isaac Sim
+# 职责边界: benchmark/policy 的实现由 forge_runtime 的 Node 包维护, 本 Skill 只带
+# 描述、清单、g05 profile、dataflow、安装脚本与文档。四个 node 一律走已安装 Node 的
+# 入口 (${FORGE_RUNTIME_BIN}/<entrypoint>), Skill 内不再存放节点源码或 launcher。
+# 运行环境经 required_environment 由宿主提供, 并在 dora start 时以 ${VAR} 展开写入
+# 各 node env。
 nodes:
   - id: gateway
     path: ${FORGE_RUNTIME_BIN}/gateway
@@ -27,8 +29,9 @@ nodes:
       - tool_out
       - bench_cmd
   - id: robodojo_benchmark
-    path: ${PAOS_SKILL_ROOT}/profiles/g05/bin/robodojo_benchmark
+    path: ${FORGE_RUNTIME_BIN}/robodojo_benchmark
     env:
+      BENCHMARK_CONFIG: ${PAOS_SKILL_ROOT}/profiles/g05/config.yaml
       PATH: ${PATH}
       ROBODOJO_ENV: ${ROBODOJO_ENV}
       ROBODOJO_ROOT: ${ROBODOJO_ROOT}
@@ -37,7 +40,6 @@ nodes:
       ROBODOJO_RESULT_DIR: ${ROBODOJO_RESULT_DIR}
       CUDA_HOME: ${CUDA_HOME}
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}
-      PAOS_SKILL_ROOT: ${PAOS_SKILL_ROOT}
     inputs:
       action: policy/action
       tick: dora/timer/millis/50
@@ -54,7 +56,7 @@ nodes:
       - benchmark_result
       - bench_report
   - id: policy
-    path: ${PAOS_SKILL_ROOT}/profiles/g05/bin/policy
+    path: ${FORGE_RUNTIME_BIN}/robodojo_policy
     env:
       ROBODOJO_ENV: ${ROBODOJO_ENV}
       XPOLICYLAB_ROOT: ${XPOLICYLAB_ROOT}
@@ -67,7 +69,6 @@ nodes:
       CUDA_HOME: ${CUDA_HOME}
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}
       ROBODOJO_CACHE_ROOT: ${ROBODOJO_CACHE_ROOT}
-      PAOS_SKILL_ROOT: ${PAOS_SKILL_ROOT}
     inputs:
       tick: dora/timer/millis/20
       policy_command:

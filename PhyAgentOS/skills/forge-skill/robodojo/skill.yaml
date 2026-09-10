@@ -13,6 +13,8 @@ profiles:
     required_binaries:
     - gateway
     - bench_endpoint
+    - robodojo_benchmark
+    - robodojo_policy
     required_assets:
     - profiles/g05/gateway.yaml
     - profiles/g05/bench_endpoint.yaml
@@ -51,3 +53,9 @@ artifacts:
       platform: linux
       arch: x86_64
       digest: b9a66fb07b04ee1f76bb8221f68f96b35d1f1ce136d3d6cf967cb7a34da8e159
+    robodojo_benchmark:
+      artifact_id: robodojo-benchmark-0.1.0
+      version: 0.1.0
+      platform: linux
+      arch: x86_64
+      digest: e48cf4e838ba73512ac1eb0c144ea17ea177bb56ad41e524c8332f9a38c19ff2
