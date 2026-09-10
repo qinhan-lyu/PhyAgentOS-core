@@ -1,39 +1,51 @@
 #!/usr/bin/env python3
-"""One-shot robodojo 0.1.0 install helper (self-contained).
+"""One-shot robodojo install helper (self-contained).
 
-Reads an unsigned schema-v3 index template (direct_download_url placeholders),
-generates fresh TOS presigned download URLs on the TARGET machine (requires the
-inner-bucket read permission + tosutil), writes a temporary schema-v3 index to a
-private temp dir, then calls `paos skill install robodojo --version 0.1.0 --index <idx>`.
+Reads the unsigned schema-v3 index template shipped next to this script, presigns a fresh
+TOS download URL for every ``bucket_key``, downloads each object once to measure ``size``
+and confirm ``expected_sha256``, writes a generated schema-v3 index to a private temp dir,
+then calls::
+
+    paos skill install robodojo --version 0.1.0 --index <generated-index.yaml>
+
+``paos skill install --index`` rejects an index entry that has no ``sha256``/``size``, which
+is why the template carries ``bucket_key`` + ``expected_sha256`` instead of a link and a
+hand-written size: the helper derives the real values from the object it just downloaded and
+aborts on a hash mismatch.
+
+Requires TOS read permission for the inner bucket plus ``tosutil``; this is a
+credential-enabled route, not a credential-less public one. Requires PyYAML (already a PAOS
+runtime dependency).
 
 Self-contained preparation:
-  * locates the template next to this script (downloaded together from TOS) OR in the
-    repo layout (<script>/../docs/paos-forge-packages.template.yaml);
-  * if `--paos-config` is supplied, prepares the isolated instance so the install does
-    NOT depend on the previous acceptance tree: creates <config>.parent/config.json and
+  * locates the template next to this script (downloaded together from TOS) OR in the repo
+    layout (<script>/../docs/paos-forge-packages.template.yaml);
+  * if ``--paos-config`` is supplied, prepares the isolated instance so the install does NOT
+    depend on a previous acceptance tree: creates <config>.parent/config.json and
     <config>.parent/py/sitecustomize.py (which calls PhyAgentOS set_config_path), and sets
     PAOS_CONFIG + PYTHONPATH for the paos child.
 
-Never modifies PAOS integrity checks, never changes the frozen packages, never
-tracks the signed index in git.
+Never modifies PAOS integrity checks, never changes the frozen packages, never tracks the
+generated index in git.
 """
 from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 
-PLACEHOLDERS = {
-    "__SKILL_URL__":   "skill-bundles/robodojo/0.1.0/robodojo-0.1.0.tar.gz",
-    "__FORGE_URL__":   "node-bundles/forge_runtime/0.1.0/forge-runtime-0.1.0-linux-x86_64.tar.gz",
-    "__ENDPOINT_URL__":"node-bundles/robodojo_endpoint/0.1.0/robodojo-endpoint-0.1.0-linux-x86_64.tar.gz",
-}
+import yaml
+
 BUCKET = "phyagentos-resource-inner"
+TEMPLATE_FIELDS = ("bucket_key", "expected_sha256")
 
 # sitecustomize.py keeps get_data_dir() anchored to the instance dir (config.parent).
 SITECUSTOMIZE = '''import os
@@ -46,6 +58,7 @@ if _p:
     except Exception:
         pass
 '''
+
 
 def resolve_template(explicit: str | None) -> Path:
     """Locate the unsigned template. Same-directory (TOS download) first, repo layout second."""
@@ -67,6 +80,7 @@ def resolve_template(explicit: str | None) -> Path:
         "or pass --template <path>"
     )
 
+
 def find_tosutil(explicit: str | None) -> str:
     if explicit:
         return explicit
@@ -81,6 +95,8 @@ def find_tosutil(explicit: str | None) -> str:
         "TOSUTIL=<path>, or put 'tosutil' on PATH. "
         "It needs read access to the phyagentos-resource-inner bucket."
     )
+
+
 def find_paos(explicit: str | None) -> str:
     if explicit:
         return explicit
@@ -94,6 +110,8 @@ def find_paos(explicit: str | None) -> str:
         "paos not found. Configure it with --paos <path>, "
         "PAOS_BIN=<path>, or put 'paos' on PATH."
     )
+
+
 def prepare_instance(config_path: Path) -> None:
     """Make an isolated instance so install does not depend on a manually created tree."""
     config_path = config_path.expanduser().resolve()
@@ -117,13 +135,83 @@ def presign(tosutil: str, key: str, vp: str) -> str:
             return line
     raise RuntimeError(f"presign failed for {key}: {r.stdout[:200]} {r.stderr[:200]}")
 
+
+def download_and_hash(url: str, key: str, dest: Path) -> tuple[str, int]:
+    """Download one object and return its (sha256, size); never trusts the link metadata."""
+    try:
+        with urllib.request.urlopen(url, timeout=300) as response, dest.open("wb") as out:
+            shutil.copyfileobj(response, out, length=1 << 20)
+    except urllib.error.HTTPError as exc:
+        raise SystemExit(
+            f"cannot download {key}: HTTP {exc.code}. If this is the post-split candidate, "
+            "the object has not been published yet."
+        ) from exc
+    except OSError as exc:
+        raise SystemExit(f"cannot download {key}: {exc}") from exc
+    digest = hashlib.sha256()
+    size = 0
+    with dest.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def generate_index(document: dict, tosutil: str, vp: str, workdir: Path) -> Path:
+    packages = document.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise SystemExit("template has no packages list")
+    for item in packages:
+        if not isinstance(item, dict):
+            raise SystemExit("template package entry must be a mapping")
+        key = item.pop("bucket_key", None)
+        expected = item.pop("expected_sha256", None)
+        if not isinstance(key, str) or not key:
+            raise SystemExit(f"template package {item.get('kind')!r} has no bucket_key")
+        url = presign(tosutil, key, vp)
+        local = workdir / Path(key).name
+        sha256, size = download_and_hash(url, key, local)
+        if isinstance(expected, str) and expected:
+            if expected.lower() != sha256:
+                raise SystemExit(
+                    f"integrity check failed for {key}: template expected {expected.lower()}, "
+                    f"object has {sha256}"
+                )
+            print(f"[robodojo-helper] {key}: sha256 {sha256} matches the template")
+        else:
+            print(
+                f"[robodojo-helper] {key}: no expected_sha256 recorded yet "
+                f"(candidate object); recording {sha256}"
+            )
+        item["direct_download_url"] = url
+        item["sha256"] = sha256
+        item["size"] = size
+        local.unlink()
+    document["generated_at"] = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    out = workdir / "index.yaml"
+    out.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return out
+
+
+def load_template(path: Path) -> dict:
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise SystemExit(f"cannot read template {path}: {exc}") from exc
+    if not isinstance(document, dict) or document.get("schema_version") != 3:
+        raise SystemExit(f"template {path} is not a schema_version 3 index")
+    return document
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--template", default=None, help="unsigned schema-v3 template (default: next to script, then repo docs)")
-    ap.add_argument("--tosutil", default=None, help="tosutil path (default: TOSUTIL/PATH/home)")
-    ap.add_argument("--paos", default=None, help="paos CLI path (default: PAOS_BIN/PATH/home)")
+    ap.add_argument("--tosutil", default=None, help="tosutil path (default: TOSUTIL/PATH)")
+    ap.add_argument("--paos", default=None, help="paos CLI path (default: PAOS_BIN/PATH)")
     ap.add_argument("--vp", default="1d", help="presign validity, e.g. 1d/24h/1440min/86400s")
-    ap.add_argument("--out", default=None, help="where to write generated index (default: private temp dir)")
+    ap.add_argument("--out", default=None, help="generated index path (default: private temp dir)")
     ap.add_argument("--gen-only", action="store_true", help="generate index only, do not install")
     ap.add_argument("--index", default=None, help="use a pre-generated index file instead of generating")
     ap.add_argument("--skill", default="robodojo")
@@ -132,33 +220,31 @@ def main() -> int:
     args = ap.parse_args()
 
     template = resolve_template(args.template)
-    text = template.read_text(encoding="utf-8")
-    tosutil = find_tosutil(args.tosutil)
-    paos = find_paos(args.paos)
-    generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     if args.index:
         idx_path = Path(args.index)
         if not idx_path.is_file():
             raise SystemExit(f"index not found: {idx_path}")
     else:
-        urls = {ph: presign(tosutil, key, args.vp) for ph, key in PLACEHOLDERS.items()}
-        for ph, url in urls.items():
-            if ph not in text:
-                raise SystemExit(f"placeholder {ph} missing in template")
-            text = text.replace(ph, url)
-        out = Path(args.out) if args.out else Path(tempfile.mkdtemp(prefix="robodojo-index-")) / "index.yaml"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8")
-        idx_path = out
+        document = load_template(template)
+        tosutil = find_tosutil(args.tosutil)
+        workdir = Path(args.out).expanduser().resolve().parent if args.out else Path(
+            tempfile.mkdtemp(prefix="robodojo-index-")
+        )
+        workdir.mkdir(parents=True, exist_ok=True)
+        generated = generate_index(document, tosutil, args.vp, workdir)
+        idx_path = Path(args.out).expanduser().resolve() if args.out else generated
+        if args.out:
+            shutil.move(str(generated), str(idx_path))
         print(f"[robodojo-helper] index written: {idx_path}")
-        print(f"[robodojo-helper] generated_at={generated_at} presign_vp={args.vp}")
+        print(f"[robodojo-helper] generated_at={document['generated_at']} presign_vp={args.vp}")
         print(f"[robodojo-helper] NOTE: download URLs expire after {args.vp}; re-run to refresh.")
 
     if args.gen_only:
         print(idx_path)
         return 0
 
+    paos = find_paos(args.paos)
     env = dict(os.environ)
     if args.paos_config:
         cfg = Path(args.paos_config)
@@ -172,6 +258,7 @@ def main() -> int:
     print(f"[robodojo-helper] running: {' '.join(cmd)}")
     r = subprocess.run(cmd, env=env)
     return r.returncode
+
 
 if __name__ == "__main__":
     sys.exit(main())
